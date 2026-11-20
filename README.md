@@ -20,6 +20,21 @@ docker compose exec -T app pytest -q
 - 5. 分区判定：`/partitions`，`/api/partitions`。
 - 6. 访问对账：`/audit`，`/api/audit`。
 - 7. 审计归档：`/seals`，`/api/seals`。
+- 8. 查询准入：`/admissions`，`/api/admissions`（联合查询按分区裁决，详见下文）。
+
+## 查询准入（M8）
+
+联合分析把多个分区合成一次聚合查询：已授权分区当天要出数，但另一个分区刚到期。M8 不做整单放行/整单拒绝的二选一，而是逐分区复算授权，为每个查询形成唯一准入结论：
+
+- **整单放行**：所有分区都能独立证明在授权范围内；
+- **部分放行**：只放行能独立证明授权范围的分区，到期/未授权分区拦截，合法分析不断档；
+- **整单拒绝**：没有任何可放行分区。
+
+裁决直接复用 M3 授权定版与 M4 冲突裁决（拒绝优先、半开区间 `[start,end)`），查询裁决、对账与证据导出引用同一组分区依据 `basis_sha256`。
+
+准入账本只增不改：同一查询重试不新增结论，仅追加 `RETRY` 流水；复核切换失败（陈旧版本 409、不可封存 422）保留旧结论和原分区依据，失败也留痕。未证明放行结果未混入到期数据（`taint=0` 且行数对平）前，封存按钮禁用、封存接口返回 `NOT_SEALABLE`。
+
+入口：`POST /api/admissions`（sample 或 csv，幂等落账）、`GET /api/admissions`（即时演算不落账）、`POST /api/admissions/upload`、`GET /api/admissions/runs`、`POST /api/admissions/runs/<id>/review`（`封存`/`退回补证`，需 version）、`GET /api/admissions/runs/<id>/journal`、`GET /api/admissions/runs/<id>/evidence`。样例为 `sample_data/admissions.csv`。
 
 ## 核心规则
 

@@ -13,6 +13,7 @@
 | M5 分区判定 | 查看并运行分区判定 | `/api/partitions` | `app/modules/m5_partitions/rules.py` | `tests/test_m5.py` |
 | M6 访问对账 | 查看并运行访问对账 | `/api/audit` | `app/modules/m6_audit/rules.py` | `tests/test_m6.py` |
 | M7 审计归档 | 查看并运行审计归档 | `/api/seals` | `app/modules/m7_seals/rules.py` | `tests/test_m7.py` |
+| M8 查询准入 | 联合查询分区裁决与封存闸门 | `/api/admissions` | `app/modules/m8_admissions/rules.py`、`app/admission_store.py` | `tests/test_m8.py`、`tests/test_m8_api.py` |
 
 ## 陷阱登记
 
@@ -29,6 +30,10 @@
 | TRAP-07 | 上游结果空值 | 误报拒绝 | 隔离缺失 | `app/values.py` | `tests/test_m3.py::test_real_missing_decision_not_zero` |
 | TRAP-19 | 允许与拒绝重叠 | 后写覆盖 | 拒绝优先且排序证据 | `app/modules/m4_conflicts/rules.py` | `tests/test_m4.py::test_deny_priority_counterexample` |
 | TRAP-23 | 授权到期点 | 多放行一次 | 半开生效窗 | `app/modules/m3_grants/rules.py` | `tests/test_m3.py::test_expiry_endpoint_excluded` |
+| TRAP-31 | 联合查询整单二选一 | 整单放行泄露越期，或整单拒绝断档 | 逐分区裁决，部分放行只出可独立证明授权范围的结果 | `app/modules/m8_admissions/rules.py` | `tests/test_m8.py::test_mixed_query_partial_release_keeps_authorized_partition` |
+| TRAP-32 | 同查询重试新增结论 | 结论漂移、依据被覆盖 | query_key 幂等，重试只追加 RETRY 流水 | `app/admission_store.py` | `tests/test_m8.py::test_retry_same_query_creates_no_new_conclusion` |
+| TRAP-33 | 切换失败丢旧结论 | 失败回滚把留痕和原依据一起清掉 | 失败留痕同连接先提交，旧结论与原分区依据不动 | `app/admission_store.py` | `tests/test_m8.py::test_stale_switch_keeps_old_conclusion_and_partition_basis` |
+| TRAP-34 | 未证明无到期混入即封存 | 越期数据进入封存证据 | taint/对平闸门，未过闸返回 NOT_SEALABLE | `app/admission_store.py` | `tests/test_m8.py::test_non_sealable_run_refuses_seal` |
 
 ## 对账规则
 

@@ -1,7 +1,9 @@
 from flask import render_template
 from app.config import MODULES,TITLE,SHORT
 from app.pipeline import execute,load_sample
-from app import store
+from app import store, admission_store, admission_pipeline
+
+
 def register_pages(app):
     def page(index):
         run=store.latest() or execute(load_sample("dirty.csv"))
@@ -11,6 +13,23 @@ def register_pages(app):
         labels={'event_id': '事件号', 'principal': '主体', 'resource': '资源', 'partition': '分区', 'access_time': '访问时刻', 'observed': '执行结果', 'at': '事件 UTC', 'candidate_count': '生效授权数', 'rule_evidence': '命中规则', 'effect': '授权裁决', 'conflict': '规则冲突', 'partition_result': '分区裁决', 'violation': '执行差异', 'expected': '应允许', 'reported': '实允许', 'difference': '差异', 'status': '结论', 'resources': '资源数', 'accepted': '采纳行', 'active_hits': '生效命中', 'grant_versions': '授权数', 'conflicts': '冲突行', 'explicit_denies': '显式拒绝', 'default_denies': '默认拒绝', 'allowed': '应放行', 'blocked': '应拒绝', 'violations': '越权放行', 'false_blocks': '误拦截', 'records': '封存数', 'source_lines': '来源行', 'sha256': '摘要', 'ready': '可封存', 'differences': '差异数'}
         for key,label in {'accepted_inputs': '采纳来源行', 'quarantine_inputs': '隔离来源行', 'output_records': '结果记录', 'input': '输入行', 'excluded': '排除行', 'balanced': '行数平衡', 'expected_total': '预期合计', 'reported_total': '申报合计', 'differences': '差异项', 'blank': '空行', 'repeated_headers': '分段表头', 'encoding': '编码', 'duplicate': '重复行', 'quarantine': '隔离行', 'accepted': '采纳行', 'sha256': '校验摘要', 'ready': '可归档'}.items(): labels.setdefault(key,label)
         return render_template(f"m{index+1}.html",title=TITLE,short=SHORT,modules=MODULES,index=index,run=run,stage=stage,rows=rows,columns=columns[:12],history=store.history(),labels=labels)
+    def admission_page():
+        run=admission_store.latest_run() or admission_pipeline.execute(
+            admission_pipeline.load_sample("admissions.csv"))
+        labels={
+            "query_id":"查询号","conclusion":"准入结论","partition":"分区","principal":"主体",
+            "resource":"资源","verdict":"分区裁决","rule_evidence":"命中规则","rows":"分区行数",
+            "block_reason":"拦截原因","released_partitions":"放行分区","blocked_partitions":"拦截分区",
+            "basis_sha256":"依据摘要","sealable":"可封存","taint":"混入到期","balanced":"行数对平",
+            "released_count":"放行分区数","blocked_count":"拦截分区数","volume_total":"查询总行数",
+            "volume_released":"放行行数","queries":"查询数","released_partitions":"放行分区",
+            "blocked_partitions":"拦截分区","full_release":"整单放行","partial_release":"部分放行",
+            "full_reject":"整单拒绝","quarantine_partitions":"隔离分区","accepted_partitions":"采纳分区",
+        }
+        return render_template("m8.html",title=TITLE,short=SHORT,modules=MODULES,index=7,
+                               run=run,labels=labels,history=admission_store.history(),
+                               journal=admission_store.journal(run["run_id"]))
     app.add_url_rule("/",view_func=lambda:page(4))
-    for index,(slug,name) in enumerate(MODULES):
+    for index,(slug,name) in enumerate(MODULES[:-1]):
         app.add_url_rule("/"+slug,endpoint="page_"+slug,view_func=lambda index=index:page(index))
+    app.add_url_rule("/admissions",endpoint="page_admissions",view_func=admission_page)

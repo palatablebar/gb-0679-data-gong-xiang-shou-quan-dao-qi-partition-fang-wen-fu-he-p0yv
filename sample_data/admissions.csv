@@ -1,0 +1,16 @@
+query_id,principal,resource,partition,submitted_at,rows,note
+Q-100,analyst,orders,2026-09,2026-11-19T12:00:00Z,1200,授权分区当日出数
+Q-100,analyst,orders,2026-10,2026-11-19T12:00:00Z,800,G-02显式拒绝分区
+Q-200,auditor,customers,2026-05,2026-11-16T00:00:00Z,500,常规联合分析
+Q-200,auditor,customers,2026-10,2026-11-16T00:00:00Z,300,常规联合分析
+Q-300,guest,orders,2026-09,2026-11-16T00:00:00Z,60,无授权主体
+Q-300,guest,orders,2026-10,2026-11-16T00:00:00Z,40,无授权主体
+Q-400,analyst,orders,2026-10,2026-11-20T00:00:00Z,100,到期点半开区间G-02失效
+Q-400,analyst,orders,2026-12,2026-11-20T00:00:00Z,50,超出G-01分区窗
+Q-900,analyst,orders,2026-13,2026-11-16T00:00:00Z,10,非法分区
+,analyst,orders,2026-10,2026-11-16T00:00:00Z,10,查询号缺失
+Q-901,analyst,orders,2026-10,2026-11-16T00:00:00Z,abc,行数非数字
+Q-902,analyst,orders,2026-10,2026-11-16 00:00:00,12,时间缺偏移
+Q-100,analyst,orders,2026-09,2026-11-19T12:00:00Z,1200,同查询分区重复
+
+query_id,principal,resource,partition,submitted_at,rows,note

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{title}} · 查询准入</title>
+<link rel="stylesheet" href="/static/theme.css">
+<link rel="stylesheet" href="/static/layout.css">
+<link rel="stylesheet" href="/static/components.css">
+<link rel="stylesheet" href="/static/admission.css">
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand">查询准入</div>
+    <nav>
+      {% for slug,name in modules %}
+      <a class="{{'active' if slug=='admissions' else ''}}" href="/{{slug}}">{{'%02d'|format(loop.index)}}　{{name}}</a>
+      {% endfor %}
+    </nav>
+    <small>{{run.run_id}}<br>版本 {{run.version}}<br>{{run.rule_version}}<br>{{run.review}}</small>
+  </aside>
+  <div class="work">
+    <header class="topbar">
+      <h1>$ 查询准入裁决 --admission</h1>
+      <span class="badge {{'sealed' if run.sealed else ''}}">{{run.review}}</span>
+      <button id="seal" {{'disabled' if not run.metrics.sealable or run.sealed else ''}}>封存证据</button>
+      <button id="reject-review">退回补证</button>
+      <a class="btn" href="/api/admissions/runs/{{run.run_id}}/evidence">导出证据</a>
+    </header>
+    <main class="content">
+      <div class="kpis">
+        {% set m=run.metrics %}
+        {% for label,value in [('查询',m.queries),('整单放行',m.full_release),('部分放行',m.partial_release),('整单拒绝',m.full_reject),('放行分区',m.released_partitions),('拦截分区',m.blocked_partitions),('隔离',m.quarantine_partitions),('到期混入',m.taint_total)] %}
+        <div class="kpi">{{label}}<b>{{value}}</b></div>
+        {% endfor %}
+      </div>
+
+      <section class="panel">
+        <div class="panel__body command">
+          <kbd>$ admission run</kbd>
+          <select id="input-set" aria-label="查询批次">
+            <option value="admissions.csv">联合查询·授权/到期混合</option>
+          </select>
+          <button id="execute" class="primary">运行（重试复用结论）</button>
+          <input id="local-csv" type="file" accept=".csv" aria-label="查询CSV">
+          <button id="import">导入</button>
+          <span id="output" role="status"></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel__head">
+          <h2>$ seal --gate</h2>
+          <span class="{{'ok' if run.metrics.sealable else 'hold'}}">
+            {% if run.sealed %}已封存：放行结果仅含授权分区
+            {% elif run.metrics.sealable %}可封存：已证明未混入到期数据
+            {% else %}暂不封存：{{ '放行结果存在到期混入' if m.taint_total else ('无放行分区' if m.released_partitions==0 else '行数未对平') }}
+            {% endif %}
+          </span>
+        </div>
+        <div class="panel__body">
+          <div class="metric"><span>输入分区行 / 采纳 / 隔离 / 空白 / 分段表头</span>
+            <b>{{m.input}} / {{m.accepted_partitions}} / {{m.quarantine_partitions}} / {{m.blank}} / {{m.repeated_headers}}</b></div>
+          <div class="metric"><span>行数对平（输入=采纳+隔离+空白+表头）</span><b>{{m.balanced}}</b></div>
+          <div class="metric"><span>查询行数 / 放行行数（对账合计）</span><b>{{m.volume_total}} / {{m.volume_released}}</b></div>
+          <div class="metric"><span>规则版本 / 输入摘要</span><b>{{run.rule_version}} / {{run.input_sha256[:12]}}…</b></div>
+        </div>
+      </section>
+
+      <div class="grid">
+        <section class="panel wide">
+          <div class="panel__head">
+            <h2>$ query --verdict</h2>
+            <input id="grep" placeholder="查询号 / 分区 / 依据" aria-label="筛选查询">
+          </div>
+          <div class="table-scroll">
+            <table class="terminal-table">
+              <thead><tr>
+                <th>查询号</th><th>准入结论</th><th>分区</th><th>主体</th><th>资源</th>
+                <th>分区裁决</th><th>命中规则</th><th>拒绝规则</th><th>拦截原因</th>
+                <th>行数</th><th>来源行</th><th>依据摘要</th>
+              </tr></thead>
+              <tbody id="query-lines">
+                {% for q in run.queries %}
+                {% for p in q.partitions %}
+                <tr class="{{'denied' if not p.released else 'released'}}">
+                  <td>{{q.query_id}}</td>
+                  <td><b class="tag tag--{{q.conclusion}}">{{q.conclusion}}</b></td>
+                  <td>{{p.partition}}</td>
+                  <td>{{p.principal}}</td>
+                  <td>{{p.resource}}</td>
+                  <td>{{p.verdict}}</td>
+                  <td>{{p.rule_evidence}}</td>
+                  <td>{{p.deny_rules|join(' / ') if p.deny_rules else '—'}}</td>
+                  <td>{{p.block_reason if not p.released else '—'}}</td>
+                  <td>{{p.rows}}</td>
+                  <td>{{p._sources|join(',')}}</td>
+                  <td title="{{q.basis_sha256}}">{{q.basis_sha256[:10]}}…</td>
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr><td class="empty">运行查询批后形成准入结论。</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__head"><h2>$ quarantine</h2><span>{{run.quarantine|length}} 行</span></div>
+          <div class="panel__body">
+            {% for q in run.quarantine %}
+            <div class="reason-row"><span>{{q._line}}</span><div><b>{{q.reason}}</b><br>{{q.detail}}（{{q.get('query_id','无查询号')}}）</div></div>
+            {% else %}<div class="empty">无隔离记录。</div>{% endfor %}
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel__head"><h2>$ query --basis</h2><span>裁决/对账/导出同依据</span></div>
+          <div class="panel__body tree">
+            {% for q in run.queries %}
+            <p><b>{{q.query_id}}</b> → {{q.conclusion}}
+              <small>放行 [{{q.released_partitions|join(', ') or '无'}}] ｜ 拦截 [{{q.blocked_partitions|join(', ') or '无'}}]</small>
+              <small>对平 {{q.balanced}} ｜ 到期混入 {{q.taint}} ｜ 可封存 {{q.sealable}}</small>
+              <small>{{q.basis_sha256}}</small>
+            </p>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="panel wide">
+          <div class="panel__head"><h2>$ journal --append-only</h2><span>只增不改</span></div>
+          <div class="table-scroll">
+            <table class="terminal-table">
+              <thead><tr><th>#</th><th>事件</th><th>对象</th><th>说明</th><th>时刻(UTC)</th></tr></thead>
+              <tbody>
+                {% for entry in journal %}
+                <tr><td>{{entry.seq}}</td><td>{{entry.event}}</td><td>{{entry.query_key or entry.run_id}}</td><td style="text-align:left">{{entry.detail}}</td><td>{{entry.at[:19]}}</td></tr>
+                {% else %}<tr><td class="empty">暂无流水。</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+    <footer class="statusbar">
+      <span>{{run.run_id}} / 版本 {{run.version}} / {{run.rule_version}}</span>
+      <span>UTC / 未证明未混入到期数据前暂不封存 / APPEND-ONLY</span>
+    </footer>
+  </div>
+</div>
+<script>let admissionRecord={{ {'id':run.run_id,'version':run.version,'sealable':run.metrics.sealable,'sealed':run.sealed}|tojson }};</script>
+<script src="/static/admission.js"></script>
+</body>
+</html>

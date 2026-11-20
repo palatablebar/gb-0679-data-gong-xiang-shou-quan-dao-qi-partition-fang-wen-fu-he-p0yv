@@ -1,9 +1,11 @@
 import pytest
-from app import store
+from app import store, admission_store
 from app.config import ROOT
 from app.pipeline import calculate,load_sample
 @pytest.fixture(autouse=True)
-def isolated_database(tmp_path,monkeypatch): monkeypatch.setattr(store,"DATA_DIR",tmp_path)
+def isolated_database(tmp_path,monkeypatch):
+    monkeypatch.setattr(store,"DATA_DIR",tmp_path)
+    monkeypatch.setattr(admission_store,"DATA_DIR",tmp_path)
 @pytest.fixture
 def sample(): return load_sample("dirty.csv")
 @pytest.fixture
